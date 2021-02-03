@@ -1,0 +1,1 @@
+pyuic5 Proba.ui -o proba.py
