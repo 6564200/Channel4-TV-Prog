@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 
 import xml.etree.cElementTree as ET
@@ -9,19 +10,20 @@ from threading import Thread
 import logging
 import fnmatch
 import asyncio
-
-
+import json
+from omxplayer.player import OMXPlayer
+from pathlib import Path
 from time import sleep
 from datetime import datetime, timedelta
 #from openpyxl import Workbook
 
 from email import encoders
 from email.mime.base import MIMEBase
-from email.mime.multipart import MIMEMultipart      
+from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
 print(sys.version)
-logging.basicConfig(filename="playout.log", level=logging.INFO)
+logging.basicConfig(filename="playout.log", level=logging.INFO, format='%(asctime)s - %(message)s', datefmt='%d-%b %H:%M:%S')
 
 async def check(file):
   proc = Popen("ffprobe -v error -show_format " + file, shell=True, stdout=PIPE, stderr=PIPE)
@@ -40,15 +42,14 @@ def duration(file):
   da = proc.communicate()
   if len(da[0]) > 0:
     z = str(da[0])
-    print(str(da[0]).find("duration="))
+#    print(str(da[0]).find("duration="))
     p = str(da[0])[(str(da[0]).find("duration=") + 9):]
     p = p[:p.find("r")-1]
-    
-    print("dur "+p)
+#    print("dur "+p)
     fps = str(da[0])[(str(da[0]).find("nb_frames=") + 10):]
     fps = fps[:fps.find("r")-1]
-    print("fps "+fps)
-    rez = float(p)
+#    print("fps "+fps)
+    rez = float(p[:8])
   else:
     rez = -1
   return rez
@@ -71,7 +72,7 @@ def sendEmail(self):
         encoders.encode_base64(part)
         part.add_header("Content-Disposition", f"attachment; filename= {xls_filename}",)
         msg.attach(part)
-        
+
         try:
             server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
             print('Connect smtp.gmail.com')
@@ -87,65 +88,72 @@ def sendEmail(self):
             print('Something went wrong...')
 
 class PlayOutThread(Thread):
-    def __init__(self, cmd):
+    def __init__(self, cmd, DUR):
         Thread.__init__(self)
         self._cmd = cmd
+        self._DUR = DUR
     def run(self):
             cmd = self._cmd
-            proc = Popen(cmd, shell=True, stdout=PIPE, stderr=PIPE, encoding='utf-8')
-            stdout, stderr = proc.communicate()
-            print(stdout)
-            #print(stderr)
+            DUR = self._DUR
+            #player = OMXPlayer(cmd, dbus_name='org.mpris.MediaPlayer2.omxplayer1', args=["-b", "--aspect-mode",  "stretch"])
+            #player.set_aspect_mode('stretch')
+            #player.play()
+            sleep(DUR+1.3)
+            player.quit()
 
 
-async def main():
+def main():
   if len(sys.argv) < 2:
       print("Argument is empty")
       print("Enter path as an argument")
       sys.exit()
-      
+
   logging.info("BEGIN")
   root = sys.argv[1]
+  jsonf = sys.argv[2]
+  fjson = open(sys.argv[2])
+  schedule = json.load(fjson)
+  #print(json.dumps(schedule, indent=2,separators=(", ", " = ")))
+  #print(schedule["program"])
   pattern = '*.[mM][pP][44]'
   file_ext = '.mp4'
   ff_cmd = '-c:a copy -vcodec copy -y'
 
   logging.info("BEGIN")
   e = k = 0
-  for folder, subdirs, files in os.walk(root):
-      cur_dir = folder.replace('/','\\')
-      cur_dir = folder
-      print(cur_dir)
-      s = ''
-      os.chdir( cur_dir )
-      logging.info(os.getcwd())
-      for filename in files:
+  player1 = OMXPlayer("/home/pi/playout/Logo4.mp4", dbus_name='org.mpris.MediaPlayer2.omxplayer0', args=["-b"])
+  player2 = OMXPlayer("/home/pi/playout/Logo4.mp4", dbus_name='org.mpris.MediaPlayer2.omxplayer1', args=["-b"])
+  while True:
+    for prog in schedule["program"]:
+      #print("source", prog["source"])
+      #print(prog["source"].find('.mp4'))
+      if prog["source"].find('.mp4') > 5:
+            DUR = duration(prog["source"])
+            cmd = prog["source"]
+      elif prog["source"].find('41.stream') > 5:
+            DUR = prog["dur"]
+            cmd = prog["stream"]
+      elif prog["source"].find('04.stream') > 5:
+            DUR = prog["dur"]
+            cmd = prog["stream"]
 
-          logging.info(filename)          
-          if fnmatch.fnmatch(filename, '*.mp4'):
-            DUR = duration(filename)
-            cmd = "ffplay -hide_banner -t "+ str(DUR) +" -autoexit -i \"" + filename + "\""
-          elif fnmatch.fnmatch(filename, '*41.stream'):
-            DUR = 10
-            cmd = "ffplay -hide_banner -t "+ str(DUR) +" -autoexit -i rtmp://hunterphoto.ru/Channel4/stream "
-          elif fnmatch.fnmatch(filename, '*04.stream'):
-            DUR = 6
-            cmd = "ffplay -hide_banner -t "+ str(DUR) +" -autoexit -i rtmp://hunterphoto.ru/Channel4/stream "
-            
-          thplay = PlayOutThread(cmd)
-
-          if DUR > 5:
+      #thplay = PlayOutThread(cmd,DUR)
+      #print('DUR: ',prog['dur'], "ffprobe", DUR)
+      if DUR > 3:
             logging.info("PLAY " + cmd)
-            thplay.start()
-            #thplay.join()
-            #print(thplay.is_alive(), DUR, cmd)
-            await asyncio.sleep(DUR-0.1)
+            if (k % 2 == 0):
+               player1 = OMXPlayer(cmd, dbus_name='org.mpris.MediaPlayer2.omxplayer1', args=["-b", "--aspect-mode",  "stretch"])
+               player2.quit()
+            else:
+               player2 = OMXPlayer(cmd, dbus_name='org.mpris.MediaPlayer2.omxplayer2', args=["-b", "--aspect-mode",  "stretch"])
+               player1.quit()
+            sleep(DUR-0.1)
             k += 1
-          else:
-            print("---------------ERROR")
+      else:
+            #print("---------------ERROR")
             e += 1
-            logging.error(cur_dir+" "+filename+" :")
-  logging.info("TOTAL PLAY " + str(k) + " ERROR " + str(e))
+            logging.error(cmd)
+    logging.info("TOTAL PLAY " + str(k) + " ERROR " + str(e))
 
 
 if __name__ == "__main__":
