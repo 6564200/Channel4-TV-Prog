@@ -15,7 +15,6 @@ from omxplayer.player import OMXPlayer
 from pathlib import Path
 from time import sleep
 from datetime import datetime, timedelta
-#from openpyxl import Workbook
 
 from email import encoders
 from email.mime.base import MIMEBase
@@ -42,13 +41,10 @@ def duration(file):
   da = proc.communicate()
   if len(da[0]) > 0:
     z = str(da[0])
-#    print(str(da[0]).find("duration="))
     p = str(da[0])[(str(da[0]).find("duration=") + 9):]
     p = p[:p.find("r")-1]
-#    print("dur "+p)
     fps = str(da[0])[(str(da[0]).find("nb_frames=") + 10):]
     fps = fps[:fps.find("r")-1]
-#    print("fps "+fps)
     rez = float(p[:8])
   else:
     rez = -1
@@ -75,12 +71,12 @@ def sendEmail(self):
 
         try:
             server = smtplib.SMTP_SSL('smtp.gmail.com', 465)
-            print('Connect smtp.gmail.com')
+
             server.ehlo()
             server.login(fromaddr, mypass)
-            print('Login smtp.gmail.com')
+
             server.send_message(msg)
-            print('Send')
+
             server.close()
 
             print('Email sent!')
@@ -113,8 +109,7 @@ def main():
   jsonf = sys.argv[2]
   fjson = open(sys.argv[2])
   schedule = json.load(fjson)
-  #print(json.dumps(schedule, indent=2,separators=(", ", " = ")))
-  #print(schedule["program"])
+
   pattern = '*.[mM][pP][44]'
   file_ext = '.mp4'
   ff_cmd = '-c:a copy -vcodec copy -y'
@@ -125,8 +120,7 @@ def main():
   player2 = OMXPlayer("/home/pi/playout/Logo4.mp4", dbus_name='org.mpris.MediaPlayer2.omxplayer1', args=["-b"])
   while True:
     for prog in schedule["program"]:
-      #print("source", prog["source"])
-      #print(prog["source"].find('.mp4'))
+
       if prog["source"].find('.mp4') > 5:
             DUR = duration(prog["source"])
             cmd = prog["source"]
@@ -138,7 +132,7 @@ def main():
             cmd = prog["stream"]
 
       #thplay = PlayOutThread(cmd,DUR)
-      #print('DUR: ',prog['dur'], "ffprobe", DUR)
+
       if DUR > 3:
             logging.info("PLAY " + cmd)
             if (k % 2 == 0):
